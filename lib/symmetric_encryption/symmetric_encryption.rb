@@ -296,6 +296,13 @@ module SymmetricEncryption
     key_pair
   end
 
+  def self.generate_encoded_encrypted_symmetric_key_pair(filename=nil, environment=nil)
+    encrypted_key_pair = generate_encrypted_symmetric_key_pair(filename, environment)
+    encrypted_key_pair[:key] = ::Base64.encode64(encrypted_key_pair[:key])
+    encrypted_key_pair[:iv] = ::Base64.encode64(encrypted_key_pair[:iv])
+    encrypted_key_pair
+  end
+
   # Generate new random symmetric keys for use with this Encryption library
   #
   # Note: Only the current Encryption key settings are used
