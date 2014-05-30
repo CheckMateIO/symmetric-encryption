@@ -313,20 +313,20 @@ module SymmetricEncryption
     if key_filename = cipher_cfg[:key_filename]
       # Save symmetric key after encrypting it with the private RSA key, backing up existing files if present
       File.rename(key_filename, "#{key_filename}.#{Time.now.to_i}") if File.exist?(key_filename)
-      File.open(key_filename, 'wb') {|file| file.write( key_pair[:key] ) }
+      File.open(key_filename, 'wb') {|file| file.write( encrypted_key_pair[:key] ) }
       puts("Generated new Symmetric Key for encryption. Please copy #{key_filename} to the other web servers in #{environment}.")
     elsif !cipher_cfg[:key]
-      key = key_pair[:key]
+      key = encrypted_key_pair[:key]
       puts "Generated new Symmetric Key for encryption. Set the KEY environment variable in #{environment} to:"
       puts ::Base64.encode64(key)
     end
 
     if iv_filename = cipher_cfg[:iv_filename]
       File.rename(iv_filename, "#{iv_filename}.#{Time.now.to_i}") if File.exist?(iv_filename)
-      File.open(iv_filename, 'wb') {|file| file.write( key_pair[:iv] ) }
+      File.open(iv_filename, 'wb') {|file| file.write( encrypted_key_pair[:iv] ) }
       puts("Generated new Symmetric Key for encryption. Please copy #{iv_filename} to the other web servers in #{environment}.")
     elsif !cipher_cfg[:iv]
-      iv = key_pair[:iv]
+      iv = encrypted_key_pair[:iv]
       puts "Generated new Symmetric Key for encryption. Set the IV environment variable in #{environment} to:"
       puts ::Base64.encode64(iv)
     end
