@@ -261,16 +261,7 @@ module SymmetricEncryption
     true
   end
 
-  # Generate new random symmetric keys for use with this Encryption library
-  #
-  # Note: Only the current Encryption key settings are used
-  #
-  # Creates Symmetric Key .key
-  #   and initilization vector .iv
-  #       which is encrypted with the above Public key
-  #
-  # Existing key files will be renamed if present
-  def self.generate_symmetric_key_files(filename=nil, environment=nil)
+  def self.generate_symmetric_key_pair(filename=nil, environment=nil)
     config_filename = filename || File.join(Rails.root, "config", "symmetric-encryption.yml")
     config = YAML.load(ERB.new(File.new(config_filename).read).result)[environment || Rails.env]
 
@@ -291,7 +282,20 @@ module SymmetricEncryption
 
     # Generate a new Symmetric Key pair
     iv_filename = cipher_cfg[:iv_filename]
-    key_pair = SymmetricEncryption::Cipher.random_key_pair(cipher_name || 'aes-256-cbc')
+    SymmetricEncryption::Cipher.random_key_pair(cipher_name || 'aes-256-cbc')
+  end
+
+  # Generate new random symmetric keys for use with this Encryption library
+  #
+  # Note: Only the current Encryption key settings are used
+  #
+  # Creates Symmetric Key .key
+  #   and initilization vector .iv
+  #       which is encrypted with the above Public key
+  #
+  # Existing key files will be renamed if present
+  def self.generate_symmetric_key_files(filename=nil, environment=nil)
+    key_pair = generate_symmetric_key_pair(filename, environment)
 
     if key_filename = cipher_cfg[:key_filename]
       # Save symmetric key after encrypting it with the private RSA key, backing up existing files if present
