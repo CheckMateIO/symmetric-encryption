@@ -261,28 +261,39 @@ module SymmetricEncryption
     true
   end
 
-  def self.generate_symmetric_key_pair(filename=nil, environment=nil)
+  def self.load_config(filename=nil, environment=nil)
     config_filename = filename || File.join(Rails.root, "config", "symmetric-encryption.yml")
-    config = YAML.load(ERB.new(File.new(config_filename).read).result)[environment || Rails.env]
+    YAML.load(ERB.new(File.new(config_filename).read).result)[environment || Rails.env]
+  end
 
-    # RSA key to decrypt key files
+  def self.first_cipher(config)
+    # Check if config file contains 1 or multiple ciphers
+    ciphers = config.delete('ciphers')
+    cfg = ciphers.nil? ? config : ciphers.first
+    # Convert keys to symbols
+    cipher_cfg = {}
+    cfg.each_pair{|k,v| cipher_cfg[k.to_sym] = v}
+    cipher_cfg
+  end
+
+  def self.generate_symmetric_key_pair(filename=nil, environment=nil)
+    config = load_config(filename, environment)
+    cipher_cfg = first_cipher(config)
+    cipher_name = cipher_cfg[:cipher_name] || cipher_cfg[:cipher]
+    SymmetricEncryption::Cipher.random_key_pair(cipher_name || 'aes-256-cbc')
+  end
+
+  def self.generate_encrypted_symmetric_key_pair(filename=nil, environment=nil)
+    config = load_config(filename, environment)
+    # RSA key to encrypt key parts
     private_rsa_key = config.delete('private_rsa_key')
     raise "The configuration file must contain a 'private_rsa_key' parameter to generate symmetric keys" unless private_rsa_key
     rsa_key = OpenSSL::PKey::RSA.new(private_rsa_key)
 
-    # Check if config file contains 1 or multiple ciphers
-    ciphers = config.delete('ciphers')
-    cfg = ciphers.nil? ? config : ciphers.first
-
-    # Convert keys to symbols
-    cipher_cfg = {}
-    cfg.each_pair{|k,v| cipher_cfg[k.to_sym] = v}
-
-    cipher_name = cipher_cfg[:cipher_name] || cipher_cfg[:cipher]
-
-    # Generate a new Symmetric Key pair
-    iv_filename = cipher_cfg[:iv_filename]
-    SymmetricEncryption::Cipher.random_key_pair(cipher_name || 'aes-256-cbc')
+    key_pair = generate_symmetric_key_pair(filename, environment)
+    key_pair[:key] = rsa_key.public_encrypt(key_pair[:key])
+    key_pair[:iv] = rsa_key.public_encrypt(key_pair[:iv])
+    key_pair
   end
 
   # Generate new random symmetric keys for use with this Encryption library
@@ -295,25 +306,27 @@ module SymmetricEncryption
   #
   # Existing key files will be renamed if present
   def self.generate_symmetric_key_files(filename=nil, environment=nil)
-    key_pair = generate_symmetric_key_pair(filename, environment)
+    encrypted_key_pair = generate_encrypted_symmetric_key_pair(filename, environment)
 
+    config = load_config(filename, environment)
+    cipher_cfg = first_cipher(config)
     if key_filename = cipher_cfg[:key_filename]
       # Save symmetric key after encrypting it with the private RSA key, backing up existing files if present
       File.rename(key_filename, "#{key_filename}.#{Time.now.to_i}") if File.exist?(key_filename)
-      File.open(key_filename, 'wb') {|file| file.write( rsa_key.public_encrypt(key_pair[:key]) ) }
+      File.open(key_filename, 'wb') {|file| file.write( key_pair[:key] ) }
       puts("Generated new Symmetric Key for encryption. Please copy #{key_filename} to the other web servers in #{environment}.")
     elsif !cipher_cfg[:key]
-      key = rsa_key.public_encrypt(key_pair[:key])
+      key = key_pair[:key]
       puts "Generated new Symmetric Key for encryption. Set the KEY environment variable in #{environment} to:"
       puts ::Base64.encode64(key)
     end
 
-    if iv_filename
+    if iv_filename = cipher_cfg[:iv_filename]
       File.rename(iv_filename, "#{iv_filename}.#{Time.now.to_i}") if File.exist?(iv_filename)
-      File.open(iv_filename, 'wb') {|file| file.write( rsa_key.public_encrypt(key_pair[:iv]) ) }
+      File.open(iv_filename, 'wb') {|file| file.write( key_pair[:iv] ) }
       puts("Generated new Symmetric Key for encryption. Please copy #{iv_filename} to the other web servers in #{environment}.")
     elsif !cipher_cfg[:iv]
-      iv = rsa_key.public_encrypt(key_pair[:iv])
+      iv = key_pair[:iv]
       puts "Generated new Symmetric Key for encryption. Set the IV environment variable in #{environment} to:"
       puts ::Base64.encode64(iv)
     end
@@ -345,8 +358,7 @@ module SymmetricEncryption
   #  environment:
   #    Which environments config to load. Usually: production, development, etc.
   def self.read_config(filename=nil, environment=nil)
-    config_filename = filename || File.join(Rails.root, "config", "symmetric-encryption.yml")
-    config = YAML.load(ERB.new(File.new(config_filename).read).result)[environment || Rails.env]
+    config = load_config(filename, environment)
 
     # RSA key to decrypt key files
     private_rsa_key = config.delete('private_rsa_key')
